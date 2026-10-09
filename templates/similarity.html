@@ -1,0 +1,13 @@
+{{define "similarity"}}
+{{if .User.Teacher}}
+{{if .Submission.SimilarityScore}}
+<section class="panel" id="similarity"><h2>Высокое сходство кода: {{.Submission.SimilarityScore}}%</h2>
+<p class="muted">Сходство не доказывает списывание. Короткие решения могут совпадать независимо.</p>
+<div class="table-wrap"><table><thead><tr><th>Ученик</th><th>Класс</th><th>Отправка</th><th>Сходство</th></tr></thead><tbody>
+{{range .Submission.Matches}}<tr><td>{{.Name}}</td><td>{{if .ClassName}}{{.ClassName}}{{else}}—{{end}}</td><td><a href="/submissions/{{.ID}}">#{{.ID}}</a></td><td>{{.Score}}%</td></tr>{{end}}
+</tbody></table></div></section>
+{{else if not .Submission.SimilarityChecked}}
+<div class="alert" data-poll="/submissions/{{.Submission.ID}}/status" data-current="{{.Submission.Status}}" data-similarity-pending="true">Проверка сходства кода…</div>
+{{end}}
+{{end}}
+{{end}}

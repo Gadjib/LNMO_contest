@@ -1,0 +1,11 @@
+{{define "test-details"}}
+<tr><td colspan="5"><details class="test-details" {{if ne .Status "AC"}}open{{end}}>
+<summary>Данные теста {{.TestID}}</summary>
+<div class="test-data">
+<div><h3>Входные данные</h3>{{if .TestAvailable}}{{if .Input}}<pre>{{.Input}}</pre>{{else}}<p class="muted">Пустой ввод</p>{{end}}{{else}}<p class="muted">Данные теста недоступны</p>{{end}}</div>
+<div><h3>Вывод ученика</h3>{{if .Output}}<pre>{{.Output}}</pre>{{else}}<p class="muted">Нет вывода</p>{{end}}{{if .OutputTruncated}}<p class="muted">Показаны первые 64 КБ вывода.</p>{{end}}</div>
+<div><h3>Ожидаемый ответ</h3>{{if .TestAvailable}}{{if .Answer}}<pre>{{.Answer}}</pre>{{else}}<p class="muted">Пустой ответ</p>{{end}}{{else}}<p class="muted">Данные теста недоступны</p>{{end}}</div>
+</div>
+{{if .Error}}<h3>Диагностика (stderr, до 4 КБ)</h3><pre>{{.Error}}</pre>{{end}}
+</details></td></tr>
+{{end}}

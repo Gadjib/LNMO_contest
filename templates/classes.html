@@ -1,0 +1,7 @@
+{{define "class-filter"}}
+<form method="get" class="class-filter">
+{{if .SelectedUser}}<input type="hidden" name="user" value="{{.SelectedUser}}">{{end}}
+<label>Класс<select name="class"><option value="">Все классы</option><option value="~" {{if eq .ClassFilter "~"}}selected{{end}}>Без класса</option>{{range .Classes}}<option value="{{.}}" {{if eq $.ClassFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+<button>Показать</button>
+</form>
+{{end}}

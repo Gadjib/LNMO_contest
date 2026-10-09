@@ -1,0 +1,12 @@
+[Unit]
+Description=Bounded temporary storage for contest sandboxes
+Before=contests-worker.service
+
+[Mount]
+What=tmpfs
+Where=/var/local/lib/isolate
+Type=tmpfs
+Options=size=256M,nr_inodes=16384,mode=0755,nosuid,nodev
+
+[Install]
+WantedBy=multi-user.target

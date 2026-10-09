@@ -1,0 +1,38 @@
+format_version: 1
+code: sum
+title: "Сумма двух чисел"
+statement: |
+  Даны два целых числа. Найдите их сумму.
+input_format: |
+  Одна строка содержит целые числа a и b.
+  -10^9 ≤ a, b ≤ 10^9.
+output_format: |
+  Выведите одно целое число — сумму a и b.
+notes: ""
+limits:
+  time_ms: 1000
+  memory_mb: 256
+  output_kb: 1024
+allowed_languages:
+  - python3
+  - cpp17
+checker:
+  type: tokens
+scoring:
+  type: sum
+  max_score: 100
+examples:
+  - input: |
+      2 3
+    output: |
+      5
+    explanation: "2 + 3 = 5."
+tests:
+  - id: "01"
+    input_file: tests/01.in
+    answer_file: tests/01.out
+    points: 50
+  - id: "02"
+    input_file: tests/02.in
+    answer_file: tests/02.out
+    points: 50

@@ -1,0 +1,28 @@
+[Unit]
+Description=Contests web application
+After=network.target
+
+[Service]
+User=contests
+Group=contests
+WorkingDirectory=/var/lib/contests
+ExecStart=/opt/contests/contests serve -db /var/lib/contests/contests.db -addr 127.0.0.1:8080
+Restart=on-failure
+RestartSec=3
+Environment=GOMEMLIMIT=192MiB
+Environment=GOMAXPROCS=2
+UMask=0077
+MemoryMax=384M
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/contests
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+[Unit]
+Description=Contests sequential judge worker
+Requires=isolate.service var-local-lib-isolate.mount
+After=isolate.service var-local-lib-isolate.mount
+
+[Service]
+User=contests
+Group=contests
+WorkingDirectory=/var/lib/contests
+ExecStart=/opt/contests/contests worker -db /var/lib/contests/contests.db
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+Environment=GOMEMLIMIT=128MiB
+Environment=GOMAXPROCS=1
+UMask=0077
+Nice=10
+CPUWeight=20
+MemoryMax=256M
+TasksMax=64
+PrivateTmp=true
+ProtectHome=true
+# Isolate is setuid and manages its own mount namespaces and cgroups.
+# NoNewPrivileges/ProtectControlGroups would prevent the sandbox from starting.
+
+[Install]
+WantedBy=multi-user.target
