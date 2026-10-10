@@ -1,0 +1,18 @@
+format_version: 1
+code: A
+title: "Сумма"
+statement: "Даны два целых числа. Найдите их сумму."
+input_format: "Два целых числа от −1000 до 1000."
+output_format: "Выведите их сумму."
+limits: {time_ms: 1000, memory_mb: 256, output_kb: 64}
+allowed_languages: [python3, cpp17]
+checker: {type: tokens}
+scoring: {type: sum, max_score: 100}
+examples:
+  - input: "2 3\n"
+    output: "5\n"
+tests:
+  - id: "01"
+    input_file: tests/01.in
+    answer_file: tests/01.out
+    points: 100

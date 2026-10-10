@@ -198,6 +198,17 @@ func saveProblem(db *sql.DB, cid, pid int64, p ProblemSpec) (int64, error) {
 		return 0, e
 	}
 	defer tx.Rollback()
+	pid, e = saveProblemTx(tx, cid, pid, p)
+	if e != nil {
+		return 0, e
+	}
+	return pid, tx.Commit()
+}
+
+func saveProblemTx(tx *sql.Tx, cid, pid int64, p ProblemSpec) (int64, error) {
+	if e := p.Validate(); e != nil {
+		return 0, e
+	}
 	if pid == 0 {
 		r, e := tx.Exec("INSERT INTO problems(contest_id,code) VALUES(?,?)", cid, p.Code)
 		if e != nil {
@@ -225,7 +236,7 @@ func saveProblem(db *sql.DB, cid, pid int64, p ProblemSpec) (int64, error) {
 	if _, e = tx.Exec("UPDATE problems SET current_version=? WHERE id=?", vid, pid); e != nil {
 		return 0, e
 	}
-	return pid, tx.Commit()
+	return pid, nil
 }
 func getSubmission(db *sql.DB, id int64) (s Submission, e error) {
 	var results, spec string

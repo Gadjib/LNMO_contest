@@ -5,6 +5,7 @@
 *.db-wal
 .env
 /access.txt
+/wg_*.conf
 /class-9m-accounts.csv
 /class-10m-accounts.csv
 

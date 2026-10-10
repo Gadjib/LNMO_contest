@@ -1,0 +1,9 @@
+format_version: 1
+title: "Арифметика"
+description: "Сумма и произведение двух чисел."
+starts: "2026-10-15T15:00:00+03:00"
+ends: "2026-10-22T18:00:00+03:00"
+classes: ["8м"]
+problems:
+  - problems/A
+  - problems/B
