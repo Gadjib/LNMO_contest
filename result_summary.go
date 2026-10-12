@@ -115,13 +115,18 @@ func (a *App) resultSummary(w http.ResponseWriter, r *http.Request) {
 		scope += " AND c.id=?"
 		args = append(args, summary.ContestID)
 	}
-	q := `WITH best AS (
+	// Extract only small scalar values before joining students. Version specs
+	// contain full test data and must never enter the grouped report's sorter.
+	q := `WITH problem_scores AS MATERIALIZED (
+ SELECT p.id,p.contest_id,coalesce(json_extract(v.spec,'$.Scoring.MaxScore'),0) AS maximum
+ FROM problems p LEFT JOIN versions v ON v.id=p.current_version
+ ), best AS (
  SELECT user_id,problem_id,max(score) AS score,max(status='AC') AS solved FROM submissions WHERE status NOT IN ('QUEUED','RUNNING','JE') GROUP BY user_id,problem_id
  ), attempts AS (
  SELECT s.user_id,p.contest_id,count(*) AS attempts,sum(s.status IN ('QUEUED','RUNNING')) AS pending FROM submissions s JOIN problems p ON p.id=s.problem_id GROUP BY s.user_id,p.contest_id
- ) SELECT u.id,u.name,u.class_name,c.id,c.title,c.published,coalesce(sum(b.score),0),coalesce(sum(json_extract(v.spec,'$.Scoring.MaxScore')),0),coalesce(sum(b.solved),0),count(p.id),coalesce(a.attempts,0),coalesce(a.pending,0)
+ ) SELECT u.id,u.name,u.class_name,c.id,c.title,c.published,coalesce(sum(b.score),0),coalesce(sum(p.maximum),0),coalesce(sum(b.solved),0),count(p.id),coalesce(a.attempts,0),coalesce(a.pending,0)
  FROM users u CROSS JOIN contests c
- LEFT JOIN problems p ON p.contest_id=c.id LEFT JOIN versions v ON v.id=p.current_version
+ LEFT JOIN problem_scores p ON p.contest_id=c.id
  LEFT JOIN best b ON b.user_id=u.id AND b.problem_id=p.id
  LEFT JOIN attempts a ON a.user_id=u.id AND a.contest_id=c.id
  WHERE u.role='student' AND (NOT EXISTS(SELECT 1 FROM contest_classes cc WHERE cc.contest_id=c.id) OR EXISTS(SELECT 1 FROM contest_classes cc WHERE cc.contest_id=c.id AND cc.class_name=u.class_name) OR a.attempts>0)` + scope + `

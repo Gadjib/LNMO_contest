@@ -196,3 +196,26 @@ func TestResultSummaryBestScore(t *testing.T) {
 		t.Fatal("admin report scope")
 	}
 }
+
+func TestResultSummaryLargeTestsWithoutFilter(t *testing.T) {
+	a, pid := scopedFixture(t)
+	p, e := getProblem(a.db, pid)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Production problem versions contain multi-megabyte test data. Reports
+	// must aggregate scalar scores without multiplying those blobs by pupils.
+	if _, e = a.db.Exec("UPDATE versions SET spec=json_set(spec,'$.ReportRegressionPayload',?) WHERE id=?", strings.Repeat("x", 8<<20), p.VersionID); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = a.db.Exec(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<60)
+ INSERT INTO users(login,name,role,password,class_name) SELECT 'report-'||x,'Report pupil '||x,'student','unused','8м' FROM n`); e != nil {
+		t.Fatal(e)
+	}
+	for _, path := range []string{"/teacher/results", "/teacher/results?page=1", "/teacher/results?class=8%D0%BC"} {
+		w := requestAs(t, a, 4, "GET", path, nil)
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "Report pupil") {
+			t.Fatalf("%s: status %d", path, w.Code)
+		}
+	}
+}
