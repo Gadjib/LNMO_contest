@@ -48,6 +48,10 @@ type Page struct {
 	Classes                    []string
 	ClassFilter                string
 	RestrictedAudience         bool
+	Account                    User
+	Summary                    *ResultSummary
+	Search, RoleFilter         string
+	SelectedContest            int64
 }
 
 func newApp(db *sql.DB) *App {
@@ -97,6 +101,9 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /submissions/{id}/status", a.protected(a.submissionStatus, false))
 	m.HandleFunc("GET /teacher/users", a.protected(a.users, true))
 	m.HandleFunc("POST /teacher/users", a.protected(a.users, true))
+	m.HandleFunc("GET /teacher/users/{id}/edit", a.protected(a.editAccount, true))
+	m.HandleFunc("POST /teacher/users/{id}/edit", a.protected(a.editAccount, true))
+	m.HandleFunc("GET /teacher/results", a.protected(a.resultSummary, true))
 	m.HandleFunc("POST /teacher/users/{id}/reset", a.protected(a.resetPassword, true))
 	m.HandleFunc("POST /teacher/users/{id}/class", a.protected(a.changeClass, true))
 	m.HandleFunc("GET /teacher/contests/new", a.protected(a.editContest, true))
@@ -160,6 +167,19 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, name string, d Page
 		for _, name := range d.Contest.Classes {
 			if !slices.Contains(d.Classes, name) {
 				d.Classes = append(d.Classes, name)
+			}
+		}
+		for _, name := range d.Account.TeachingClasses {
+			if name != "" && !slices.Contains(d.Classes, name) {
+				d.Classes = append(d.Classes, name)
+			}
+		}
+		if d.User.Role == "teacher" && !d.User.AllClasses && name != "edit-contest" {
+			d.Classes = nil
+			for _, name := range d.User.TeachingClasses {
+				if name != "" {
+					d.Classes = append(d.Classes, name)
+				}
 			}
 		}
 	}
@@ -334,10 +354,22 @@ func (a *App) submissions(w http.ResponseWriter, r *http.Request) {
 		q += " AND s.user_id=?"
 		args = append(args, filter)
 	}
+	cid, err := queryID(r, "contest")
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	if cid > 0 {
+		q += " AND EXISTS(SELECT 1 FROM problems cp WHERE cp.id=s.problem_id AND cp.contest_id=?)"
+		args = append(args, cid)
+	}
 	if u.Teacher() {
 		cl, ca := classWhere(r.URL.Query().Get("class"), "u.")
 		q += cl
 		args = append(args, ca...)
+		scope, sa := studentScope(u, "u.", true)
+		q += scope
+		args = append(args, sa...)
 	}
 	q += " ORDER BY s.id DESC LIMIT 51 OFFSET ?"
 	args = append(args, page*50)
@@ -353,7 +385,7 @@ func (a *App) submissions(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 	rows.Close()
-	d := Page{Title: "Отправки", SelectedUser: filter}
+	d := Page{Title: "Отправки", SelectedUser: filter, SelectedContest: cid}
 	if len(ids) > 50 {
 		d.NextPage = page + 1
 		ids = ids[:50]
@@ -367,7 +399,7 @@ func (a *App) submissions(w http.ResponseWriter, r *http.Request) {
 		s.Source = ""
 		s.Results = nil
 		if u.Teacher() {
-			if e = a.loadSimilarity(&s, false); e != nil {
+			if e = a.loadSimilarity(&s, false, u); e != nil {
 				a.fail(w, e)
 				return
 			}
@@ -382,6 +414,13 @@ func (a *App) authorizedSubmission(w http.ResponseWriter, r *http.Request) (Subm
 		http.NotFound(w, r)
 		return s, false
 	}
+	if currentUser(r).Teacher() {
+		target, err := getAccount(a.db, s.UserID)
+		if err != nil || !currentUser(r).AccessUser(target) {
+			http.NotFound(w, r)
+			return s, false
+		}
+	}
 	return s, true
 }
 func (a *App) submission(w http.ResponseWriter, r *http.Request) {
@@ -394,7 +433,7 @@ func (a *App) submission(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, e)
 			return
 		}
-		if e := a.loadSimilarity(&s, true); e != nil {
+		if e := a.loadSimilarity(&s, true, currentUser(r)); e != nil {
 			a.fail(w, e)
 			return
 		}
@@ -408,7 +447,7 @@ func (a *App) submissionStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	response := map[string]any{"status": s.Status, "pending": s.Pending()}
 	if currentUser(r).Teacher() {
-		if e := a.loadSimilarity(&s, false); e != nil {
+		if e := a.loadSimilarity(&s, false, currentUser(r)); e != nil {
 			a.fail(w, e)
 			return
 		}
@@ -418,18 +457,29 @@ func (a *App) submissionStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 func (a *App) users(w http.ResponseWriter, r *http.Request) {
-	d := Page{Title: "Ученики и учителя"}
+	d := Page{Title: "Аккаунты", Account: User{Role: "student"}, Search: strings.TrimSpace(r.URL.Query().Get("q")), RoleFilter: r.URL.Query().Get("role_filter")}
 	if r.Method == "POST" {
 		role := r.FormValue("role")
 		if role != "student" && currentUser(r).Role != "admin" {
 			http.Error(w, "Только администратор создаёт учителей", 403)
 			return
 		}
-		_, classError := normalizeClass(r.FormValue("class_name"))
-		if role == "student" && classError != nil {
-			d.Error = classError.Error()
-		} else if e := createUser(a.db, r.FormValue("login"), r.FormValue("name"), role, r.FormValue("password"), r.FormValue("class_name")); e != nil {
-			d.Error = "Не удалось создать аккаунт: проверьте уникальность логина, имя и длину пароля (10–72 байта)"
+		account, e := a.accountFromForm(r, 0)
+		d.Account = account
+		if currentUser(r).Role != "admin" {
+			account.Blocked = false
+			account.AllClasses = false
+			account.TeachingClasses = nil
+			if !currentUser(r).AccessClass(account.ClassName) {
+				http.Error(w, "Можно добавлять учеников только в свои классы", 403)
+				return
+			}
+		}
+		if e == nil {
+			_, e = saveAccount(a.db, account, r.FormValue("password"))
+		}
+		if e != nil {
+			d.Error = accountError(e)
 		} else {
 			http.Redirect(w, r, "/teacher/users?created=1", 303)
 			return
@@ -444,7 +494,21 @@ func (a *App) users(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("class_saved") == "1" {
 		d.Notice = "Класс изменён"
 	}
+	if r.URL.Query().Get("saved") == "1" {
+		d.Notice = "Аккаунт сохранён, прежние сессии закрыты"
+	}
 	cl, ca := classWhere(r.URL.Query().Get("class"), "")
+	scope, sa := studentScope(currentUser(r), "", false)
+	if currentUser(r).Role == "admin" && r.URL.Query().Get("class") != "" {
+		name := r.URL.Query().Get("class")
+		if name == "~" {
+			name = ""
+		}
+		cl = " AND ((users.role='student' AND users.class_name=?) OR (users.role='teacher' AND (coalesce((SELECT teacher_all FROM account_settings WHERE user_id=users.id),1)=1 OR EXISTS(SELECT 1 FROM teacher_classes tc WHERE tc.user_id=users.id AND tc.class_name=?))))"
+		ca = []any{name, name}
+	}
+	cl += scope
+	ca = append(ca, sa...)
 	rows, e := a.db.Query("SELECT id,login,name,role,class_name FROM users WHERE 1=1"+cl+" ORDER BY role,class_name,name", ca...)
 	if e != nil {
 		a.fail(w, e)
@@ -456,9 +520,30 @@ func (a *App) users(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&u.ID, &u.Login, &u.Name, &u.Role, &u.ClassName)
 		d.Users = append(d.Users, u)
 	}
+	rows.Close()
+	for i := range d.Users {
+		account, err := getAccount(a.db, d.Users[i].ID)
+		if err != nil {
+			a.fail(w, err)
+			return
+		}
+		d.Users[i] = account
+	}
+	filtered := d.Users[:0]
+	for _, u := range d.Users {
+		if (d.Search == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Login), strings.ToLower(d.Search))) && (d.RoleFilter == "" || d.RoleFilter == u.Role) {
+			filtered = append(filtered, u)
+		}
+	}
+	d.Users = filtered
 	a.render(w, r, "users", d)
 }
 func (a *App) resetPassword(w http.ResponseWriter, r *http.Request) {
+	target, err := getAccount(a.db, idParam(r))
+	if err != nil || !currentUser(r).AccessUser(target) {
+		http.NotFound(w, r)
+		return
+	}
 	var role string
 	if e := a.db.QueryRow("SELECT role FROM users WHERE id=?", idParam(r)).Scan(&role); e != nil {
 		http.NotFound(w, r)
@@ -469,11 +554,11 @@ func (a *App) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := r.FormValue("password")
-	if len(p) < 10 || len(p) > 72 {
-		http.Error(w, "Пароль: 10–72 байта", 400)
+	if p == "" {
+		http.Error(w, "Пароль не может быть пустым", 400)
 		return
 	}
-	h, e := bcrypt.GenerateFromPassword([]byte(p), 12)
+	h, e := hashPassword(p)
 	if e != nil {
 		a.fail(w, e)
 		return
@@ -653,6 +738,23 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) {
 		cl += " AND (EXISTS (SELECT 1 FROM contest_classes cc WHERE cc.contest_id=? AND cc.class_name=users.class_name) OR EXISTS (SELECT 1 FROM submissions s JOIN problems p ON p.id=s.problem_id WHERE s.user_id=users.id AND p.contest_id=?))"
 		ca = append(ca, c.ID, c.ID)
 	}
+	scope, sa := studentScope(currentUser(r), "users.", false)
+	cl += scope
+	ca = append(ca, sa...)
+	uid, err := queryID(r, "user")
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	if uid > 0 {
+		target, err := getAccount(a.db, uid)
+		if err != nil || target.Role != "student" || !currentUser(r).AccessUser(target) {
+			http.NotFound(w, r)
+			return
+		}
+		cl += " AND users.id=?"
+		ca = append(ca, uid)
+	}
 	rows, e := a.db.Query("SELECT id,login,name,role,class_name FROM users WHERE role='student'"+cl+" ORDER BY class_name,name", ca...)
 	if e != nil {
 		a.fail(w, e)
@@ -678,7 +780,7 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) {
 		scores[[2]int64{uid, pid}] = score
 	}
 	rows.Close()
-	d := Page{Title: "Результаты · " + c.Title, Contest: c, Problems: p}
+	d := Page{Title: "Результаты · " + c.Title, Contest: c, Problems: p, SelectedUser: uid}
 	for _, u := range users {
 		row := BoardRow{User: u}
 		for _, pr := range p {
@@ -691,9 +793,8 @@ func (a *App) results(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "results", d)
 }
 func (a *App) rejudge(w http.ResponseWriter, r *http.Request) {
-	s, e := getSubmission(a.db, idParam(r))
-	if e != nil {
-		http.NotFound(w, r)
+	s, ok := a.authorizedSubmission(w, r)
+	if !ok {
 		return
 	}
 	if s.Pending() {
@@ -701,7 +802,7 @@ func (a *App) rejudge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Keep the recorded version and replace its evaluation. A restart requeues RUNNING rows.
-	if _, e = a.db.Exec("UPDATE submissions SET status='QUEUED',score=0,results='[]',diagnostic='',finished=NULL WHERE id=? AND status NOT IN ('QUEUED','RUNNING')", s.ID); e != nil {
+	if _, e := a.db.Exec("UPDATE submissions SET status='QUEUED',score=0,results='[]',diagnostic='',finished=NULL WHERE id=? AND status NOT IN ('QUEUED','RUNNING')", s.ID); e != nil {
 		a.fail(w, e)
 		return
 	}

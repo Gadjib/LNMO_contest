@@ -15,8 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed templates/* static/*
@@ -107,14 +105,7 @@ func createUser(db *sql.DB, login, name, role, password string, class ...string)
 	if role != "student" && role != "teacher" && role != "admin" {
 		return fmt.Errorf("неверная роль")
 	}
-	if len(password) < 10 || len(password) > 72 {
-		return fmt.Errorf("пароль должен содержать 10–72 байта")
-	}
-	hash, e := bcrypt.GenerateFromPassword([]byte(password), 12)
-	if e != nil {
-		return e
-	}
-	_, e = db.Exec("INSERT INTO users(login,name,role,password,class_name) VALUES(?,?,?,?,?)", login, name, role, string(hash), className)
+	_, e := saveAccount(db, User{Login: login, Name: name, Role: role, ClassName: className}, password)
 	return e
 }
 func randomToken() string {

@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type contextKey string
@@ -38,7 +36,12 @@ func (a *App) middleware(next http.Handler) http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, 22<<20)
 		var u User
 		if c, e := r.Cookie("session"); e == nil {
-			a.db.QueryRow("SELECT u.id,u.login,u.name,u.role,u.class_name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?", tokenHash(c.Value), time.Now().Unix()).Scan(&u.ID, &u.Login, &u.Name, &u.Role, &u.ClassName)
+			var id int64
+			if e = a.db.QueryRow("SELECT user_id FROM sessions WHERE token=? AND expires>?", tokenHash(c.Value), time.Now().Unix()).Scan(&id); e == nil {
+				if account, err := getAccount(a.db, id); err == nil && !account.Blocked {
+					u = account
+				}
+			}
 		}
 		csrf := ""
 		if c, e := r.Cookie("csrf"); e == nil && len(c.Value) == 64 {
@@ -140,11 +143,11 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var id int64
 	var hash string
-	e := a.db.QueryRow("SELECT id,password FROM users WHERE login=?", r.FormValue("login")).Scan(&id, &hash)
+	e := a.db.QueryRow("SELECT u.id,u.password FROM users u LEFT JOIN account_settings a ON a.user_id=u.id WHERE u.login=? AND coalesce(a.blocked,0)=0", r.FormValue("login")).Scan(&id, &hash)
 	if e != nil {
 		hash = a.dummyHash
 	}
-	valid := bcrypt.CompareHashAndPassword([]byte(hash), []byte(r.FormValue("password"))) == nil
+	valid := checkPassword(hash, r.FormValue("password"))
 	if e != nil || !valid {
 		d.Error = "Неверный логин или пароль"
 		a.render(w, r, "login", d)
@@ -173,12 +176,12 @@ func (a *App) password(w http.ResponseWriter, r *http.Request) {
 		var hash string
 		a.db.QueryRow("SELECT password FROM users WHERE id=?", currentUser(r).ID).Scan(&hash)
 		p := r.FormValue("password")
-		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(r.FormValue("old"))) != nil {
+		if !checkPassword(hash, r.FormValue("old")) {
 			d.Error = "Текущий пароль неверен"
-		} else if len(p) < 10 || len(p) > 72 {
-			d.Error = "Новый пароль: 10–72 байта"
+		} else if p == "" {
+			d.Error = "Пароль не может быть пустым"
 		} else {
-			h, e := bcrypt.GenerateFromPassword([]byte(p), 12)
+			h, e := hashPassword(p)
 			if e != nil {
 				a.fail(w, e)
 				return

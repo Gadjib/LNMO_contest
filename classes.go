@@ -35,6 +35,15 @@ func (a *App) changeClass(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, e.Error(), 400)
 		return
 	}
+	target, err := getAccount(a.db, idParam(r))
+	if err != nil || target.Role != "student" || !currentUser(r).AccessUser(target) {
+		http.NotFound(w, r)
+		return
+	}
+	if !currentUser(r).AccessClass(name) {
+		http.Error(w, "Нельзя переводить ученика в чужой класс", 403)
+		return
+	}
 	result, e := a.db.Exec("UPDATE users SET class_name=? WHERE id=? AND role='student'", name, idParam(r))
 	if e != nil {
 		a.fail(w, e)

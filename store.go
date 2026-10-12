@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS problem_images(id TEXT PRIMARY KEY, mime TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS version_images(version_id INTEGER NOT NULL REFERENCES versions(id) ON DELETE CASCADE, image_id TEXT NOT NULL REFERENCES problem_images(id), PRIMARY KEY(version_id,image_id));
 CREATE INDEX IF NOT EXISTS version_images_image ON version_images(image_id);
 CREATE TABLE IF NOT EXISTS contest_classes(contest_id INTEGER NOT NULL REFERENCES contests(id) ON DELETE CASCADE, class_name TEXT NOT NULL, PRIMARY KEY(contest_id,class_name));
+CREATE TABLE IF NOT EXISTS account_settings(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, blocked INTEGER NOT NULL DEFAULT 0, teacher_all INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS teacher_classes(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, class_name TEXT NOT NULL, PRIMARY KEY(user_id,class_name));
 `
 
 func openDB(file string) (*sql.DB, error) {
@@ -72,6 +74,8 @@ func migrateClasses(db *sql.DB) error {
 }
 
 type User struct {
+	Blocked, AllClasses          bool
+	TeachingClasses              []string
 	ID                           int64
 	Login, Name, Role, ClassName string
 }

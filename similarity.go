@@ -224,17 +224,24 @@ func indexNextSimilarity(db *sql.DB) (bool, error) {
 	}
 	return true, tx.Commit()
 }
-func (a *App) loadSimilarity(s *Submission, details bool) error {
+func (a *App) loadSimilarity(s *Submission, details bool, viewers ...User) error {
 	if e := a.db.QueryRow("SELECT EXISTS(SELECT 1 FROM code_fingerprints WHERE submission_id=?)", s.ID).Scan(&s.SimilarityChecked); e != nil {
 		return e
 	}
-	if e := a.db.QueryRow("SELECT coalesce(max(score),0) FROM code_matches WHERE left_id=? OR right_id=?", s.ID, s.ID).Scan(&s.SimilarityScore); e != nil {
+	scope := ""
+	var sa []any
+	if len(viewers) > 0 {
+		scope, sa = studentScope(viewers[0], "u.", false)
+	}
+	base := ` FROM code_matches m JOIN submissions other ON other.id=CASE WHEN m.left_id=? THEN m.right_id ELSE m.left_id END JOIN users u ON u.id=other.user_id WHERE (m.left_id=? OR m.right_id=?)` + scope
+	args := append([]any{s.ID, s.ID, s.ID}, sa...)
+	if e := a.db.QueryRow("SELECT coalesce(max(m.score),0)"+base, args...).Scan(&s.SimilarityScore); e != nil {
 		return e
 	}
 	if !details || s.SimilarityScore == 0 {
 		return nil
 	}
-	rows, e := a.db.Query(`SELECT other.id,u.id,u.name,u.class_name,m.score FROM code_matches m JOIN submissions other ON other.id=CASE WHEN m.left_id=? THEN m.right_id ELSE m.left_id END JOIN users u ON u.id=other.user_id WHERE m.left_id=? OR m.right_id=? ORDER BY m.score DESC,other.id`, s.ID, s.ID, s.ID)
+	rows, e := a.db.Query(`SELECT other.id,u.id,u.name,u.class_name,m.score`+base+` ORDER BY m.score DESC,other.id`, args...)
 	if e != nil {
 		return e
 	}

@@ -1,0 +1,13 @@
+{{define "result-summary"}}{{template "header" .}}
+<div class="page-title"><div><h1>Итоговые результаты</h1><p class="muted">По каждой задаче учитывается лучшая завершённая попытка. Очередь и ошибки системы в баллы не входят.</p></div></div>
+<section class="panel"><form method="get" class="report-filters">
+<label>Класс<select name="class"><option value="">Все доступные классы</option>{{if .User.AccessClass ""}}<option value="~" {{if eq .ClassFilter "~"}}selected{{end}}>Без класса</option>{{end}}{{range .Classes}}<option value="{{.}}" {{if eq $.ClassFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+<label>Ученик<select name="user"><option value="0">Все ученики</option>{{range .Summary.Students}}<option value="{{.ID}}" {{if eq $.Summary.StudentID .ID}}selected{{end}}>{{.Name}}{{if .ClassName}} · {{.ClassName}}{{end}}</option>{{end}}</select></label>
+<label>Контест<select name="contest"><option value="0">Все контесты</option>{{range .Summary.Contests}}<option value="{{.ID}}" {{if eq $.Summary.ContestID .ID}}selected{{end}}>{{.Title}}</option>{{end}}</select></label>
+<div class="actions"><button class="primary">Показать</button><a href="/teacher/results">Сбросить</a></div>
+</form></section>
+<section class="panel table-wrap"><table><thead><tr><th>Ученик</th><th>Класс</th><th>Контест</th><th>Баллы</th><th>Решено задач</th><th>Отправки</th><th></th></tr></thead><tbody>
+{{range .Summary.Rows}}<tr><td><a href="/teacher/results?user={{.UserID}}">{{.Name}}</a></td><td>{{if .ClassName}}{{.ClassName}}{{else}}—{{end}}</td><td><a href="/teacher/results?contest={{.ContestID}}">{{.ContestTitle}}</a>{{if not .Published}}<small>Черновик</small>{{end}}</td><td>{{if .Attempts}}<strong>{{.Score}} / {{.Maximum}}</strong>{{else}}—<small>Не сдавал</small>{{end}}</td><td>{{.Solved}} / {{.Tasks}}</td><td><a href="/submissions?user={{.UserID}}&amp;contest={{.ContestID}}">{{.Attempts}}</a>{{if .Pending}}<small>В очереди: {{.Pending}}</small>{{end}}</td><td><a href="/teacher/contests/{{.ContestID}}/results?user={{.UserID}}">По задачам →</a></td></tr>
+{{else}}<tr><td colspan="7" class="empty">Нет учеников или контестов для выбранных фильтров.</td></tr>{{end}}
+</tbody></table></section><div class="actions">{{if .Summary.Previous}}<a class="button" href="{{.Summary.Previous}}">← Назад</a>{{end}}{{if .Summary.Next}}<a class="button" href="{{.Summary.Next}}">Далее →</a>{{end}}</div>
+{{template "footer" .}}{{end}}

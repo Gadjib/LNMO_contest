@@ -53,6 +53,20 @@ if (userRole) {
   const updateClass = () => { if (field) { field.hidden = userRole.value !== 'student'; field.querySelector('input').disabled = field.hidden; } };
   userRole.addEventListener('change', updateClass);
   updateClass();
+  const teacherFields = document.querySelector('[data-teacher-fields]');
+  const updateTeacher = () => {
+    if (!teacherFields) return;
+    const teacher = userRole.value === 'teacher';
+    teacherFields.hidden = !teacher;
+    teacherFields.querySelectorAll('input').forEach(input => { input.disabled = !teacher; });
+    const list = teacherFields.querySelector('[data-teacher-class-list]');
+    const all = teacherFields.querySelector('[name="teacher_access"]:checked')?.value === 'all';
+    list.hidden = all;
+    list.querySelectorAll('input').forEach(input => { input.disabled = !teacher || all; });
+  };
+  userRole.addEventListener('change', updateTeacher);
+  document.querySelectorAll('[name="teacher_access"]').forEach(input => input.addEventListener('change', updateTeacher));
+  updateTeacher();
 }
 document.addEventListener("click", (event) => {
   const add = event.target.closest("[data-add]");
