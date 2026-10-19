@@ -32,6 +32,7 @@ type BoardRow struct {
 	Total  int
 }
 type Page struct {
+	ClassLanguages             []ClassLanguage
 	Title, Error, Notice, CSRF string
 	User                       User
 	Contests                   []Contest
@@ -100,6 +101,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /submissions/{id}", a.protected(a.submission, false))
 	m.HandleFunc("GET /submissions/{id}/status", a.protected(a.submissionStatus, false))
 	m.HandleFunc("GET /teacher/users", a.protected(a.users, true))
+	m.HandleFunc("GET /admin/classes", a.protected(a.classLanguages, true))
+	m.HandleFunc("POST /admin/classes", a.protected(a.classLanguages, true))
 	m.HandleFunc("POST /teacher/users", a.protected(a.users, true))
 	m.HandleFunc("GET /teacher/users/{id}/edit", a.protected(a.editAccount, true))
 	m.HandleFunc("POST /teacher/users/{id}/edit", a.protected(a.editAccount, true))
@@ -283,6 +286,10 @@ func (a *App) problem(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if e := a.applyClassLanguages(currentUser(r), &p); e != nil {
+		a.fail(w, e)
+		return
+	}
 	a.render(w, r, "problem", Page{Title: p.Spec.Title, Problem: p, Contest: c})
 }
 func (a *App) submit(w http.ResponseWriter, r *http.Request) {
@@ -291,6 +298,10 @@ func (a *App) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
+	if e := a.applyClassLanguages(u, &p); e != nil {
+		a.fail(w, e)
+		return
+	}
 	bad := func(s string) {
 		a.render(w, r, "problem", Page{Title: p.Spec.Title, Problem: p, Contest: c, Error: s, Submission: Submission{Source: r.FormValue("source")}})
 	}

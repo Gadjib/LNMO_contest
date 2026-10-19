@@ -12,6 +12,7 @@ import (
 )
 
 const schema = `
+CREATE TABLE IF NOT EXISTS class_language_settings(class_name TEXT PRIMARY KEY, mode TEXT NOT NULL CHECK(mode IN ('both','python3','cpp17')));
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, login TEXT UNIQUE NOT NULL, name TEXT NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('student','teacher','admin')));
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS contests(id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', starts INTEGER NOT NULL, ends INTEGER NOT NULL, published INTEGER NOT NULL DEFAULT 0);

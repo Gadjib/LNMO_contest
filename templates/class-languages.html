@@ -1,0 +1,6 @@
+{{define "class-languages"}}{{template "header" .}}
+<a class="back" href="/teacher/users">← Аккаунты</a>
+<div class="page-title"><h1>Классы и языки</h1></div>
+<p class="muted">Настройка действует на новые отправки всех учеников класса. В задаче могут быть дополнительные ограничения. По умолчанию доступны оба языка; старые решения сохраняются.</p>
+{{range .ClassLanguages}}<section class="panel"><form method="post">{{template "csrf" $}}<input type="hidden" name="class_name" value="{{.Name}}"><div class="section-title"><h2>{{if .Name}}{{.Name}}{{else}}Без класса{{end}}</h2><span class="muted">Учеников: {{.Students}}</span></div><label>Доступные языки<select name="mode"><option value="both" {{if eq .Mode "both"}}selected{{end}}>Python и C++</option><option value="python3" {{if eq .Mode "python3"}}selected{{end}}>Только Python</option><option value="cpp17" {{if eq .Mode "cpp17"}}selected{{end}}>Только C++</option></select></label><button class="primary">Сохранить</button></form></section>{{else}}<p class="empty">Добавьте учеников и укажите их классы в разделе «Аккаунты».</p>{{end}}
+{{template "footer" .}}{{end}}

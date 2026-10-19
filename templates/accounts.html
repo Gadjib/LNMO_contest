@@ -8,7 +8,7 @@
 {{end}}
 
 {{define "users"}}{{template "header" .}}
-<div class="page-title"><h1>{{if eq .User.Role "admin"}}Аккаунты{{else}}Ученики{{end}}</h1></div>
+<div class="page-title"><h1>{{if eq .User.Role "admin"}}Аккаунты{{else}}Ученики{{end}}</h1>{{if eq .User.Role "admin"}}<a class="button" href="/admin/classes">Классы и языки</a>{{end}}</div>
 <details class="panel" {{if .Error}}open{{end}}><summary>+ Новый аккаунт</summary><form method="post">{{template "csrf" .}}{{template "account-fields" .}}<button class="primary">Создать аккаунт</button></form></details>
 <section class="panel"><form method="get" class="report-filters"><label>Поиск<input name="q" value="{{.Search}}" placeholder="Имя или логин"></label><label>Класс<select name="class"><option value="">Все доступные классы</option>{{if .User.AccessClass ""}}<option value="~" {{if eq .ClassFilter "~"}}selected{{end}}>Без класса</option>{{end}}{{range .Classes}}<option value="{{.}}" {{if eq $.ClassFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>{{if eq .User.Role "admin"}}<label>Роль<select name="role_filter"><option value="">Все роли</option><option value="student" {{if eq .RoleFilter "student"}}selected{{end}}>Ученик</option><option value="teacher" {{if eq .RoleFilter "teacher"}}selected{{end}}>Учитель</option><option value="admin" {{if eq .RoleFilter "admin"}}selected{{end}}>Администратор</option></select></label>{{end}}<div class="actions"><button>Показать</button><a href="/teacher/users">Сбросить</a></div></form></section>
 <section class="panel table-wrap"><table><thead><tr><th>Имя</th><th>Логин</th><th>Роль</th><th>Классы</th><th>Действия</th></tr></thead><tbody>
