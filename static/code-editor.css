@@ -1,0 +1,11 @@
+.code-editor{position:relative;margin-top:7px;background:#fff;border-radius:7px;overflow:hidden;font-weight:400}
+.code-editor .code-input,.code-editor .code-highlight{font-family:"DejaVu Sans Mono",Consolas,monospace;font-size:13px;font-weight:400;font-style:normal;line-height:1.5;letter-spacing:normal;tab-size:4;white-space:pre;overflow-wrap:normal;word-break:normal;padding:10px 12px;border:1px solid transparent;border-radius:7px;margin:0;width:100%;box-sizing:border-box}
+.code-editor .code-highlight{position:absolute;inset:0;height:100%;overflow:hidden;pointer-events:none;background:transparent;color:var(--ink)}
+.code-editor .code-input{position:relative;display:block;background:transparent;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--ink);border-color:#cad5e3;resize:vertical;min-height:120px;overflow:auto}
+.code-editor .code-input::selection{background:#b1c7ff80}
+.code-editor:focus-within{outline:2px solid #b1c7ff}
+.code-editor .code-input:focus{outline:none;border-color:var(--blue)}
+.syntax-keyword{color:#8534aa}.syntax-string{color:#16704b}.syntax-comment{color:#687585}.syntax-number{color:#a54813}.syntax-builtin{color:#175bbc}.syntax-directive{color:#925112}
+.source .syntax-keyword{color:#d5a6ff}.source .syntax-string{color:#9de1b2}.source .syntax-comment{color:#a7b5c8}.source .syntax-number{color:#ffc28a}.source .syntax-builtin{color:#91caff}.source .syntax-directive{color:#ffda91}
+.code-actions{margin-bottom:12px}.clipboard-buffer{position:fixed;left:-10000px;top:0;width:1px;height:1px;opacity:0}
+@media(forced-colors:active){.code-editor .code-highlight{display:none}.code-editor .code-input{color:CanvasText;-webkit-text-fill-color:CanvasText;caret-color:CanvasText}}
