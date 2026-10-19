@@ -1,0 +1,9 @@
+{{define "student-runtime-error"}}
+{{if or (eq .Status "RE") (eq .Status "TLE") (eq .Status "MLE") (eq .Status "OLE")}}
+<tr><td colspan="5"><details class="test-details" open>
+<summary>Ошибка выполнения — тест {{.TestID}}</summary>
+{{if eq .Status "RE"}}<p>Программа завершилась с ошибкой.</p>{{else if eq .Status "TLE"}}<p>Превышено ограничение времени.</p>{{else if eq .Status "MLE"}}<p>Превышено ограничение памяти.</p>{{else if eq .Status "OLE"}}<p>Превышено ограничение размера вывода.</p>{{end}}
+{{if .Error}}<h3>Сообщение программы (stderr, до 4 КБ)</h3><pre>{{.Error}}</pre>{{else if eq .Status "RE"}}<p class="muted">Программа не оставила сообщения об ошибке.</p>{{end}}
+</details></td></tr>
+{{end}}
+{{end}}
