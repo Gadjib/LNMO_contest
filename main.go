@@ -44,6 +44,13 @@ func main() {
 	}
 	defer db.Close()
 	switch os.Args[1] {
+	case "file-demo":
+		c := Contest{Title: "Работа с файлами: TXT и BIN", Description: "Тестовый контест: текстовый и бинарный ввод/вывод. 4 задачи по 100 баллов.", Starts: time.Now().Unix(), Ends: time.Now().AddDate(1, 0, 0).Unix()}
+		id, e := saveImportedContest(db, c, fileDemoProblems())
+		if e != nil {
+			log.Fatal(e)
+		}
+		fmt.Printf("Created draft file contest: %d\n", id)
 	case "init":
 		var n int
 		db.QueryRow("SELECT count(*) FROM users").Scan(&n)

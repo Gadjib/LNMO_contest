@@ -26,14 +26,18 @@ type Example struct {
 	Explanation string `yaml:"explanation,omitempty"`
 }
 type TestCase struct {
-	ID         string `yaml:"id"`
-	InputFile  string `yaml:"input_file,omitempty"`
-	AnswerFile string `yaml:"answer_file,omitempty"`
-	Points     int    `yaml:"points"`
-	Input      string `yaml:"-"`
-	Answer     string `yaml:"-"`
+	InputBytes  []byte `yaml:"-" json:",omitempty"`
+	AnswerBytes []byte `yaml:"-" json:",omitempty"`
+	ID          string `yaml:"id"`
+	InputFile   string `yaml:"input_file,omitempty"`
+	AnswerFile  string `yaml:"answer_file,omitempty"`
+	Points      int    `yaml:"points"`
+	Input       string `yaml:"-"`
+	Answer      string `yaml:"-"`
 }
 type ProblemSpec struct {
+	formError        string
+	IO               FileIO                  `yaml:"io,omitempty"`
 	Images           map[string]ProblemImage `yaml:"-" json:"-"`
 	FormatVersion    int                     `yaml:"format_version"`
 	Code             string                  `yaml:"code"`
@@ -61,8 +65,14 @@ const maxTestBytes = 1 << 20
 const maxArchiveBytes = 20 << 20
 
 func (p ProblemSpec) Validate() error {
-	if p.FormatVersion != 1 {
-		return errors.New("поддерживается только format_version: 1")
+	if p.formError != "" {
+		return errors.New(p.formError)
+	}
+	if p.FormatVersion != 1 && p.FormatVersion != 2 {
+		return errors.New("поддерживаются format_version: 1 и 2")
+	}
+	if e := p.validateIO(); e != nil {
+		return e
 	}
 	if !codePattern.MatchString(p.Code) {
 		return errors.New("код: 1–40 латинских букв, цифр, _ или -")
@@ -86,7 +96,7 @@ func (p ProblemSpec) Validate() error {
 		}
 		seenLang[v] = true
 	}
-	if p.Checker.Type != "tokens" && p.Checker.Type != "exact" && p.Checker.Type != "evacuation" && p.Checker.Type != "garden_beds" {
+	if p.Checker.Type != "bytes" && p.Checker.Type != "tokens" && p.Checker.Type != "exact" && p.Checker.Type != "evacuation" && p.Checker.Type != "garden_beds" {
 		return errors.New("неизвестный checker.type")
 	}
 	if p.Scoring.Type != "sum" || p.Scoring.MaxScore < 1 || p.Scoring.MaxScore > 10000 {
@@ -106,10 +116,10 @@ func (p ProblemSpec) Validate() error {
 			return errors.New("недопустимый вес теста")
 		}
 		sum += t.Points
-		if len(t.Input) > maxTestBytes || len(t.Answer) > maxTestBytes || !utf8.ValidString(t.Input) || !utf8.ValidString(t.Answer) {
+		if len(t.inputData()) > maxTestBytes || len(t.answerData()) > maxTestBytes || (!p.IO.Input.Binary() && !utf8.ValidString(t.inputData())) || (!p.IO.Output.Binary() && !utf8.ValidString(t.answerData())) {
 			return errors.New("тесты должны быть UTF-8, каждый файл не больше 1 МБ")
 		}
-		total += len(t.Input) + len(t.Answer)
+		total += len(t.inputData()) + len(t.answerData())
 	}
 	if sum != p.Scoring.MaxScore {
 		return errors.New("сумма баллов тестов должна совпадать с max_score")
@@ -173,7 +183,7 @@ func importProblem(data []byte) (ProblemSpec, error) {
 		if e != nil {
 			return "", e
 		}
-		if len(b) > maxTestBytes || !utf8.Valid(b) {
+		if len(b) > maxTestBytes {
 			return "", errors.New("недопустимый размер или кодировка файла")
 		}
 		return string(b), nil
@@ -181,6 +191,9 @@ func importProblem(data []byte) (ProblemSpec, error) {
 	manifest, err := read("problem.yaml")
 	if err != nil {
 		return p, err
+	}
+	if !utf8.ValidString(manifest) {
+		return p, errors.New("problem.yaml должен быть UTF-8")
 	}
 	dec := yaml.NewDecoder(strings.NewReader(manifest))
 	dec.KnownFields(true)
@@ -202,6 +215,14 @@ func importProblem(data []byte) (ProblemSpec, error) {
 		if t.Answer, err = read(t.AnswerFile); err != nil {
 			return p, err
 		}
+		if p.IO.Input.Binary() {
+			t.InputBytes = []byte(t.Input)
+			t.Input = ""
+		}
+		if p.IO.Output.Binary() {
+			t.AnswerBytes = []byte(t.Answer)
+			t.Answer = ""
+		}
 	}
 	if err = importImages(&p, files); err != nil {
 		return p, err
@@ -222,7 +243,7 @@ func exportProblem(p ProblemSpec) ([]byte, error) {
 		t := &p.Tests[i]
 		t.InputFile = fmt.Sprintf("tests/%03d.in", i+1)
 		t.AnswerFile = fmt.Sprintf("tests/%03d.out", i+1)
-		for _, f := range []struct{ n, s string }{{t.InputFile, t.Input}, {t.AnswerFile, t.Answer}} {
+		for _, f := range []struct{ n, s string }{{t.InputFile, t.inputData()}, {t.AnswerFile, t.answerData()}} {
 			w, e := z.Create(f.n)
 			if e != nil {
 				return nil, e

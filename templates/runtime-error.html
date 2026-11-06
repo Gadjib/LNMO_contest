@@ -1,4 +1,5 @@
 {{define "student-runtime-error"}}
+{{if .FileDiagnostic}}<tr><td colspan="5"><p>Тест {{.TestID}}: {{.FileDiagnostic}}</p></td></tr>{{end}}
 {{if or (eq .Status "RE") (eq .Status "TLE") (eq .Status "MLE") (eq .Status "OLE")}}
 <tr><td colspan="5"><details class="test-details" open>
 <summary>Ошибка выполнения — тест {{.TestID}}</summary>

@@ -100,6 +100,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /submissions", a.protected(a.submissions, false))
 	m.HandleFunc("GET /submissions/{id}", a.protected(a.submission, false))
 	m.HandleFunc("GET /submissions/{id}/status", a.protected(a.submissionStatus, false))
+	m.HandleFunc("GET /submissions/{id}/file", a.protected(a.testFile, true))
 	m.HandleFunc("GET /teacher/users", a.protected(a.users, true))
 	m.HandleFunc("GET /admin/classes", a.protected(a.classLanguages, true))
 	m.HandleFunc("POST /admin/classes", a.protected(a.classLanguages, true))
@@ -639,6 +640,17 @@ func problemFromForm(r *http.Request) ProblemSpec {
 	p.Checker.Type = r.FormValue("checker")
 	p.Scoring.Type = "sum"
 	p.Scoring.MaxScore, _ = strconv.Atoi(r.FormValue("max_score"))
+	p.IO.Input = IOChannel{Type: r.FormValue("io_input_type"), Name: r.FormValue("io_input_name"), Content: r.FormValue("io_input_content")}
+	p.IO.Output = IOChannel{Type: r.FormValue("io_output_type"), Name: r.FormValue("io_output_name"), Content: r.FormValue("io_output_content")}
+	for _, c := range []*IOChannel{&p.IO.Input, &p.IO.Output} {
+		if c.Type != "file" {
+			c.Name = ""
+			c.Content = ""
+		}
+	}
+	if p.IO.Input.Type == "file" || p.IO.Output.Type == "file" {
+		p.FormatVersion = 2
+	}
 	get := func(k string, i int) string {
 		a := r.PostForm[k]
 		if i < len(a) {
@@ -649,6 +661,23 @@ func problemFromForm(r *http.Request) ProblemSpec {
 	for i, id := range r.PostForm["test_id"] {
 		points, _ := strconv.Atoi(get("test_points", i))
 		p.Tests = append(p.Tests, TestCase{ID: id, Input: get("test_input", i), Answer: get("test_answer", i), Points: points})
+		t := &p.Tests[len(p.Tests)-1]
+		if p.IO.Input.Binary() {
+			if b, e := decodeHex(t.Input); e != nil {
+				p.formError = "Тест " + id + ": некорректный HEX ввода"
+			} else {
+				t.InputBytes = b
+				t.Input = ""
+			}
+		}
+		if p.IO.Output.Binary() {
+			if b, e := decodeHex(t.Answer); e != nil {
+				p.formError = "Тест " + id + ": некорректный HEX ответа"
+			} else {
+				t.AnswerBytes = b
+				t.Answer = ""
+			}
+		}
 	}
 	for i, input := range r.PostForm["example_input"] {
 		p.Examples = append(p.Examples, Example{Input: input, Output: get("example_output", i), Explanation: get("example_explanation", i)})

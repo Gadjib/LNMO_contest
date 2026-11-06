@@ -160,6 +160,9 @@ func truncate(s string, n int) string {
 	return s
 }
 func compareOutput(kind, got, want string) bool {
+	if kind == "bytes" {
+		return got == want
+	}
 	normalize := func(s string) string { return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n") }
 	if kind == "exact" {
 		return normalize(got) == normalize(want)
@@ -229,20 +232,30 @@ func judge(s Submission, p ProblemSpec) (string, int, []Result, string, error) {
 			mode = 0644
 		}
 		if e = os.WriteFile(filepath.Join(box, file), []byte(executable), mode); e == nil {
-			e = os.WriteFile(filepath.Join(box, "input"), []byte(test.Input), 0644)
+			inputName := "input"
+			if p.IO.Input.Type == "file" {
+				inputName = p.IO.Input.Name
+			}
+			e = os.WriteFile(filepath.Join(box, inputName), []byte(test.inputData()), 0644)
 		}
 		if e != nil {
 			cleanupBox()
 			return "JE", 0, nil, "", e
 		}
 		result, stdout, _, e := runBox(box, p.Limits, false, command)
+		if e == nil && p.IO.Output.Type == "file" {
+			stdout = collectFileOutput(box, p, &result)
+		}
 		cleanupBox()
 		if e != nil {
 			return "JE", 0, nil, "", e
 		}
 		result.TestID = test.ID
-		if result.Status == "AC" && !checkOutput(p.Checker.Type, test.Input, stdout, test.Answer) {
+		if result.Status == "AC" && !checkOutput(p.Checker.Type, test.inputData(), stdout, test.answerData()) {
 			result.Status = "WA"
+			if p.Checker.Type == "bytes" {
+				result.FileDiagnostic = byteDifference(stdout, test.answerData())
+			}
 		}
 		if result.Status == "AC" {
 			score += test.Points

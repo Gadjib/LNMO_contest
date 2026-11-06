@@ -1,0 +1,12 @@
+{{define "file-io-editor"}}
+<section class="panel"><h2>Ввод и вывод</h2><p class="muted">Имена должны совпадать с условием. Каждый тест запускается в чистой папке. Для бинарных файлов тесты задаются HEX-строкой или загружаются файлом.</p>
+<div class="two-columns"><fieldset><legend>Ввод</legend>
+<label>Источник<select name="io_input_type"><option value="stdio">Стандартный ввод (stdin)</option><option value="file" {{if eq .Problem.Spec.IO.Input.Type "file"}}selected{{end}}>Файл</option></select></label>
+<label>Имя файла<input name="io_input_name" value="{{.Problem.Spec.IO.Input.Name}}" placeholder="input.txt" maxlength="80"></label>
+<label>Содержимое<select name="io_input_content"><option value="text">Текст UTF-8</option><option value="binary" {{if .Problem.Spec.IO.Input.Binary}}selected{{end}}>Бинарные данные (HEX в редакторе)</option></select></label>
+</fieldset><fieldset><legend>Ответ</legend>
+<label>Источник<select name="io_output_type"><option value="stdio">Стандартный вывод (stdout)</option><option value="file" {{if eq .Problem.Spec.IO.Output.Type "file"}}selected{{end}}>Файл</option></select></label>
+<label>Имя файла<input name="io_output_name" value="{{.Problem.Spec.IO.Output.Name}}" placeholder="output.txt" maxlength="80"></label>
+<label>Содержимое<select name="io_output_content"><option value="text">Текст UTF-8</option><option value="binary" {{if .Problem.Spec.IO.Output.Binary}}selected{{end}}>Бинарные данные (HEX в редакторе)</option></select></label>
+</fieldset></div><p class="muted">Для бинарного ответа выберите побайтовое сравнение. При смене типа содержимого загрузите тесты заново. Примеры в условии всегда текстовые: для .bin укажите байты в HEX и поясните их значение.</p></section>
+{{end}}

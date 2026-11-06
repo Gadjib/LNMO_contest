@@ -113,6 +113,10 @@ type Problem struct {
 	Spec                     ProblemSpec
 }
 type Result struct {
+	OutputBytes      []byte `json:",omitempty"`
+	OutputBinary     bool   `json:",omitempty"`
+	SubmissionID     int64  `json:"-"`
+	FileDiagnostic   string `json:",omitempty"`
 	TestID, Status   string
 	Points           int
 	TimeMS, MemoryKB int64
@@ -142,9 +146,13 @@ func (a *App) loadTestDetails(s *Submission) error {
 	}
 	for i := range s.Results {
 		r := &s.Results[i]
+		r.SubmissionID = s.ID
 		if test, ok := tests[r.TestID]; ok {
-			r.Input = test.Input
-			r.Answer = test.Answer
+			r.Input = previewData(test.inputData(), p.IO.Input.Binary())
+			r.Answer = previewData(test.answerData(), p.IO.Output.Binary())
+			if r.OutputBinary {
+				r.Output = previewData(string(r.OutputBytes), true)
+			}
 			r.TestAvailable = true
 		}
 	}
