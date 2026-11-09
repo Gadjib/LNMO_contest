@@ -1,7 +1,7 @@
 {{define "result-summary"}}{{template "header" .}}
 <div class="page-title"><div><h1>Итоговые результаты</h1><p class="muted">По каждой задаче учитывается лучшая завершённая попытка. Очередь и ошибки системы в баллы не входят.</p></div></div>
 <section class="panel"><form method="get" class="report-filters">
-<label>Класс<select name="class"><option value="">Все доступные классы</option>{{if .User.AccessClass ""}}<option value="~" {{if eq .ClassFilter "~"}}selected{{end}}>Без класса</option>{{end}}{{range .Classes}}<option value="{{.}}" {{if eq $.ClassFilter .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+<fieldset><legend>Классы</legend><div class="class-options">{{if .User.AccessClass ""}}<label class="check"><input type="checkbox" name="class" value="~" {{if containsClass .Summary.Classes "~"}}checked{{end}}> Без класса</label>{{end}}{{range .Classes}}<label class="check"><input type="checkbox" name="class" value="{{.}}" {{if containsClass $.Summary.Classes .}}checked{{end}}> {{.}}</label>{{end}}</div><p class="muted">Если ничего не отмечено — все доступные классы.</p></fieldset>
 <label>Ученик<select name="user"><option value="0">Все ученики</option>{{range .Summary.Students}}<option value="{{.ID}}" {{if eq $.Summary.StudentID .ID}}selected{{end}}>{{.Name}}{{if .ClassName}} · {{.ClassName}}{{end}}</option>{{end}}</select></label>
 <label>Контест<select name="contest"><option value="0">Все контесты</option>{{range .Summary.Contests}}<option value="{{.ID}}" {{if eq $.Summary.ContestID .ID}}selected{{end}}>{{.Title}}</option>{{end}}</select></label>
 <div class="actions"><button class="primary">Показать</button><a href="/teacher/results">Сбросить</a></div>

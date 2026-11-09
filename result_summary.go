@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 type SummaryRow struct {
@@ -14,6 +15,7 @@ type SummaryRow struct {
 	Published                                        bool
 }
 type ResultSummary struct {
+	Classes              []string
 	StudentID, ContestID int64
 	Rows                 []SummaryRow
 	Students             []User
@@ -35,6 +37,17 @@ func queryID(r *http.Request, key string) (int64, error) {
 
 func (a *App) resultSummary(w http.ResponseWriter, r *http.Request) {
 	summary := &ResultSummary{}
+	seen := map[string]bool{}
+	for _, name := range r.URL.Query()["class"] {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			summary.Classes = append(summary.Classes, name)
+		}
+	}
+	if len(summary.Classes) > 100 {
+		http.Error(w, "Слишком много классов", 400)
+		return
+	}
 	var e error
 	if summary.StudentID, e = queryID(r, "user"); e != nil {
 		http.Error(w, e.Error(), 400)
@@ -64,6 +77,17 @@ func (a *App) resultSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	scope, args := studentScope(viewer, "u.", false)
+	if len(summary.Classes) > 0 {
+		marks := make([]string, len(summary.Classes))
+		for i, name := range summary.Classes {
+			marks[i] = "?"
+			if name == "~" {
+				name = ""
+			}
+			args = append(args, name)
+		}
+		scope += " AND u.class_name IN (" + strings.Join(marks, ",") + ")"
+	}
 	students, e := a.db.Query("SELECT u.id,u.name,u.class_name FROM users u WHERE u.role='student'"+scope+" ORDER BY u.class_name,u.name", args...)
 	if e != nil {
 		a.fail(w, e)
@@ -104,9 +128,6 @@ func (a *App) resultSummary(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, e)
 		return
 	}
-	cl, ca := classWhere(r.URL.Query().Get("class"), "u.")
-	scope += cl
-	args = append(args, ca...)
 	if summary.StudentID > 0 {
 		scope += " AND u.id=?"
 		args = append(args, summary.StudentID)
@@ -153,7 +174,7 @@ func (a *App) resultSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	link := func(n int64) string {
-		values := url.Values{"class": {r.URL.Query().Get("class")}, "user": {strconv.FormatInt(summary.StudentID, 10)}, "contest": {strconv.FormatInt(summary.ContestID, 10)}, "page": {strconv.FormatInt(n, 10)}}
+		values := url.Values{"class": summary.Classes, "user": {strconv.FormatInt(summary.StudentID, 10)}, "contest": {strconv.FormatInt(summary.ContestID, 10)}, "page": {strconv.FormatInt(n, 10)}}
 		return "/teacher/results?" + values.Encode()
 	}
 	if len(summary.Rows) > 50 {
