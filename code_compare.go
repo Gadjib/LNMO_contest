@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type CompareLine struct {
@@ -68,7 +70,9 @@ func (a *App) compareSubmissions(w http.ResponseWriter, r *http.Request) {
 func compareCodeLines(a, b string) ([]CompareRow, bool) {
 	left := strings.Split(strings.ReplaceAll(a, "\r\n", "\n"), "\n")
 	right := strings.Split(strings.ReplaceAll(b, "\r\n", "\n"), "\n")
-	simple := len(left)*len(right) > 1000000
+	// Bound both memory and work, including extremely long individual lines.
+	simple := len(left) > 1000000/len(right)
+	ls, rs := comparisonSignatures(left), comparisonSignatures(right)
 	var rows []CompareRow
 	add := func(i, j int) {
 		row := CompareRow{Kind: "changed"}
@@ -103,55 +107,158 @@ func compareCodeLines(a, b string) ([]CompareRow, bool) {
 		rows = append(rows, row)
 	}
 	if simple {
-		for i := 0; i < len(left) || i < len(right); i++ {
-			l, r := -1, -1
-			if i < len(left) {
-				l = i
+		// A bounded lookahead still handles nearby insertions. Never present
+		// unrelated lines as a replacement just because their numbers agree.
+		for i, j := 0, 0; i < len(left) || j < len(right); {
+			bi, bj, best := -1, -1, 0
+			for k := 0; k < 32; k++ {
+				if i+k < len(left) && j < len(right) {
+					if score := comparisonLineScore(ls[i+k], rs[j]) - k*4; score > best {
+						bi, bj, best = i+k, j, score
+					}
+				}
+				if i < len(left) && j+k < len(right) {
+					if score := comparisonLineScore(ls[i], rs[j+k]) - k*4; score > best {
+						bi, bj, best = i, j+k, score
+					}
+				}
 			}
-			if i < len(right) {
-				r = i
+			if best > 0 {
+				for i < bi {
+					add(i, -1)
+					i++
+				}
+				for j < bj {
+					add(-1, j)
+					j++
+				}
+				add(i, j)
+				i++
+				j++
+			} else if i < len(left) {
+				add(i, -1)
+				i++
+			} else {
+				add(-1, j)
+				j++
 			}
-			add(l, r)
 		}
 		return rows, true
 	}
 	width := len(right) + 1
 	dp := make([]int32, (len(left)+1)*width)
+	matches := make([]uint8, len(left)*len(right))
 	for i := len(left) - 1; i >= 0; i-- {
 		for j := len(right) - 1; j >= 0; j-- {
-			if left[i] == right[j] {
-				dp[i*width+j] = 1 + dp[(i+1)*width+j+1]
-			} else {
-				dp[i*width+j] = max(dp[(i+1)*width+j], dp[i*width+j+1])
+			score := comparisonLineScore(ls[i], rs[j])
+			matches[i*len(right)+j] = uint8(score)
+			dp[i*width+j] = max(dp[(i+1)*width+j], dp[i*width+j+1])
+			if score > 0 {
+				dp[i*width+j] = max(dp[i*width+j], int32(score)+dp[(i+1)*width+j+1])
 			}
 		}
 	}
 	i, j := 0, 0
 	for i < len(left) || j < len(right) {
-		if i < len(left) && j < len(right) && left[i] == right[j] {
+		if i < len(left) && j < len(right) && matches[i*len(right)+j] > 0 && dp[i*width+j] == int32(matches[i*len(right)+j])+dp[(i+1)*width+j+1] {
 			add(i, j)
 			i++
 			j++
 			continue
 		}
-		li, rj := i, j
-		for (i < len(left) || j < len(right)) && !(i < len(left) && j < len(right) && left[i] == right[j]) {
-			if j == len(right) || (i < len(left) && dp[(i+1)*width+j] >= dp[i*width+j+1]) {
-				i++
-			} else {
-				j++
-			}
-		}
-		for k := 0; k < i-li || k < j-rj; k++ {
-			l, r := -1, -1
-			if k < i-li {
-				l = li + k
-			}
-			if k < j-rj {
-				r = rj + k
-			}
-			add(l, r)
+		if j == len(right) || (i < len(left) && dp[(i+1)*width+j] >= dp[i*width+j+1]) {
+			add(i, -1)
+			i++
+		} else {
+			add(-1, j)
+			j++
 		}
 	}
 	return rows, false
+}
+
+type comparisonSignature struct {
+	text, trimmed, shape string
+	tokens               []string
+	runes                []rune
+	bigrams              map[string]int
+	weight               int
+}
+
+func comparisonSignatures(lines []string) []comparisonSignature {
+	result := make([]comparisonSignature, len(lines))
+	for i, line := range lines {
+		s := comparisonSignature{text: line, trimmed: strings.TrimSpace(line), weight: 110}
+		if len(s.trimmed) <= 512 {
+			s.runes = []rune(s.trimmed)
+		}
+		if s.trimmed == "" {
+			s.weight = 2
+		} else if strings.Trim(s.trimmed, "{}();") == "" {
+			s.weight = 8
+		}
+		if len(line) <= 4096 {
+			// An empty language keeps comment markers as visible tokens. These
+			// signatures only guide alignment, never the similarity percentage.
+			s.tokens = codeTokens(line, "")
+			if len(s.tokens) > 128 {
+				s.tokens = nil
+			}
+			for k, token := range s.tokens {
+				r, _ := utf8.DecodeRuneInString(token)
+				if (unicode.IsLetter(r) || r == '_') && !keptWords[token] {
+					s.tokens[k] = "identifier"
+				}
+			}
+			s.shape = strings.Join(s.tokens, "\x00")
+			s.bigrams = make(map[string]int)
+			for k := 1; k < len(s.tokens); k++ {
+				s.bigrams[s.tokens[k-1]+"\x00"+s.tokens[k]]++
+			}
+		}
+		result[i] = s
+	}
+	return result
+}
+
+func comparisonLineScore(a, b comparisonSignature) int {
+	if a.text == b.text {
+		return a.weight
+	}
+	if a.trimmed == b.trimmed {
+		return min(a.weight, b.weight, 100)
+	}
+	if len(a.tokens) > 0 && len(b.tokens) > 0 && a.tokens[0] != b.tokens[0] && (keptWords[a.tokens[0]] || keptWords[b.tokens[0]]) {
+		return 0
+	}
+	if a.shape != "" && len(a.tokens) >= 3 && len(b.tokens) >= 3 && a.tokens[0] == b.tokens[0] {
+		if a.shape == b.shape {
+			return 90
+		}
+		common := 0
+		for pair, count := range a.bigrams {
+			common += min(count, b.bigrams[pair])
+		}
+		// A strong majority of adjacent tokens must agree. This permits a
+		// changed literal or an extra declarator without pairing if with while.
+		dice := 200 * common / (len(a.tokens) + len(b.tokens) - 2)
+		if dice >= 60 {
+			return 40 + dice/3
+		}
+	}
+	// Small edits in comments or plain Unicode text remain useful matches.
+	if len(a.runes) > 0 && len(b.runes) > 0 {
+		x, y := a.runes, b.runes
+		p, s := 0, 0
+		for p < len(x) && p < len(y) && x[p] == y[p] {
+			p++
+		}
+		for s < len(x)-p && s < len(y)-p && x[len(x)-1-s] == y[len(y)-1-s] {
+			s++
+		}
+		if min(len(x), len(y)) >= 4 && 3*(p+s) >= 2*max(len(x), len(y)) {
+			return 55
+		}
+	}
+	return 0
 }

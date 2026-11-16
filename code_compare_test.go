@@ -68,3 +68,94 @@ func TestCompareAccess(t *testing.T) {
 		t.Fatal("unrelated pair allowed")
 	}
 }
+
+func TestCompareStructureAlignment(t *testing.T) {
+	left := "#include <string>\nvoid calculate() {\n    fstream source(\"input.txt\", ios::in);\n    fstream target(\"output.txt\", ios::out);\n    int total = 0, value;\n\n    if (source.is_open()) {\n        while (source >> value) {\n            total += value;\n        }\n    }\n    target << total;\n}\nint main(){\n\ncalculate();\n}"
+	right := "\nvoid solve() {\n    fstream input(\"input.txt\", ios::in);\n    fstream output(\"output.txt\", ios::out);\n    int result = 0;\n    int item;\n\n    if (input.is_open()) {\n        while (input >> item) {\n            result += item;\n        }\n    }\n    output << result;\n}\n\nint main(){\n    solve();\n}"
+	rows, simple := compareCodeLines(left, right)
+	if simple {
+		t.Fatal("unexpected fallback")
+	}
+	want := map[int]int{2: 2, 3: 3, 4: 4, 5: 5, 7: 8, 8: 9, 9: 10, 12: 13, 14: 16, 16: 17}
+	for _, row := range rows {
+		if expected, ok := want[row.Left.Number]; ok {
+			if row.Right.Number != expected {
+				t.Errorf("left line %d paired with %d, want %d", row.Left.Number, row.Right.Number, expected)
+			}
+			delete(want, row.Left.Number)
+		}
+	}
+	if len(want) > 0 {
+		t.Fatal("missing lines", want)
+	}
+	assertComparisonSource(t, left, right, rows)
+}
+
+func assertComparisonSource(t *testing.T, left, right string, rows []CompareRow) {
+	t.Helper()
+	var a, b []string
+	for _, row := range rows {
+		for i, line := range []CompareLine{row.Left, row.Right} {
+			if line.Number == 0 {
+				continue
+			}
+			if row.Kind == "changed" && line.Prefix+line.Changed+line.Suffix != line.Text {
+				t.Fatal("highlight lost text")
+			}
+			if i == 0 {
+				if line.Number != len(a)+1 {
+					t.Fatal("left order")
+				}
+				a = append(a, line.Text)
+			} else {
+				if line.Number != len(b)+1 {
+					t.Fatal("right order")
+				}
+				b = append(b, line.Text)
+			}
+		}
+	}
+	if strings.Join(a, "\n") != strings.ReplaceAll(left, "\r\n", "\n") || strings.Join(b, "\n") != strings.ReplaceAll(right, "\r\n", "\n") {
+		t.Fatal("lost source")
+	}
+}
+
+func TestCompareRelatedLinesOnly(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"void original() {", "void renamed () {"},
+		{"Привет мир", "Привёт мир"},
+		{"\tprint(1)", "  print(2)"},
+	} {
+		rows, _ := compareCodeLines(pair[0], pair[1])
+		if len(rows) != 1 || rows[0].Kind != "changed" {
+			t.Fatal("related lines separated", rows)
+		}
+		assertComparisonSource(t, pair[0], pair[1], rows)
+	}
+	for _, pair := range [][2]string{
+		{"if (ready) {", "void solve() {"},
+		{"return 42;", "fstream input(\"data\");"},
+		{"alpha", "omega"},
+		{strings.Repeat("a", 5000), strings.Repeat("b", 5000)},
+	} {
+		rows, _ := compareCodeLines(pair[0], pair[1])
+		for _, row := range rows {
+			if row.Left.Number > 0 && row.Right.Number > 0 {
+				t.Fatal("unrelated lines paired", row)
+			}
+		}
+		assertComparisonSource(t, pair[0], pair[1], rows)
+	}
+}
+
+func TestCompareBoundedAlignment(t *testing.T) {
+	left := strings.Repeat("int value = 1;\n", 1100)
+	right := "void inserted() {}\n" + strings.Repeat("int renamed = 1;\n", 1100)
+	rows, simple := compareCodeLines(left, right)
+	if !simple || rows[0].Kind != "added" || rows[1].Kind != "changed" {
+		t.Fatal("bounded alignment failed")
+	}
+	assertComparisonSource(t, left, right, rows)
+	rows, _ = compareCodeLines("a\r\n\t\r\n", "a\n\n")
+	assertComparisonSource(t, "a\r\n\t\r\n", "a\n\n", rows)
+}
