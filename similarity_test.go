@@ -119,7 +119,7 @@ func TestSimilarityBackfillAndPermissions(t *testing.T) {
 		t.Fatal("status leaked similarity")
 	}
 	w = requestAs(t, a, 2, "GET", "/submissions", nil)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "#similarity") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "/compare") {
 		t.Fatal("list warning missing")
 	}
 	// A later match must update both sides, including previously indexed attempts.

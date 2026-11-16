@@ -32,6 +32,7 @@ type BoardRow struct {
 	Total  int
 }
 type Page struct {
+	Comparison                 *CodeComparison
 	ClassLanguages             []ClassLanguage
 	Title, Error, Notice, CSRF string
 	User                       User
@@ -100,6 +101,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /submissions", a.protected(a.submissions, false))
 	m.HandleFunc("GET /submissions/{id}", a.protected(a.submission, false))
 	m.HandleFunc("GET /submissions/{id}/status", a.protected(a.submissionStatus, false))
+	m.HandleFunc("GET /submissions/{id}/compare", a.protected(a.compareSubmissions, true))
 	m.HandleFunc("GET /submissions/{id}/file", a.protected(a.testFile, true))
 	m.HandleFunc("GET /teacher/users", a.protected(a.users, true))
 	m.HandleFunc("GET /admin/classes", a.protected(a.classLanguages, true))
